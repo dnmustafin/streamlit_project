@@ -45,7 +45,7 @@ if df_rates is not None:
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     
     with col2:
-        st.subheader("📈 Топ-10 самых дорогих валют")
+        st.subheader("📈 Топ-10 самых дешевых валют")
         top_10 = df_rates[df_rates['Валюта'] != base_currency].head(10)
         
         fig = plt.bar(
