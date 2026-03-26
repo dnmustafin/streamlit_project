@@ -17,3 +17,7 @@
 - Pandas
 - Plotly
 - Requests
+
+
+## 🚀 Live Demo
+👉 [Open Dashboard](https://dnmustafin-dashboard.streamlit.app)
