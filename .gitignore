@@ -1,0 +1,41 @@
+# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Файлы с секретами
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+streamlit.log
+
+# Данные
+data/*.csv
+data/*.db
+
+# Файлы сборки
+dist/
+build/
+*.egg-info/
