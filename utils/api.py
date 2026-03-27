@@ -5,15 +5,51 @@ from datetime import datetime, timedelta
 import os
 import json
 
+
+def _normalize_rates_dict(rates):
+    """Нормализует словарь курсов до формата ISO-like 3-letter кодов."""
+    if not isinstance(rates, dict):
+        return {}
+
+    normalized = {}
+    for code, value in rates.items():
+        try:
+            code_up = str(code).upper()
+            rate = float(value)
+        except (TypeError, ValueError):
+            continue
+
+        # Оставляем только буквенные 3-буквенные коды и корректные значения.
+        if len(code_up) == 3 and code_up.isalpha() and rate > 0:
+            normalized[code_up] = rate
+
+    return normalized
+
 @st.cache_data(ttl=3600)
 def fetch_currency_rates(base_currency="USD"):
-    """Получает актуальные курсы валют"""
+    """Получает актуальные курсы валют из надежных источников с fallback."""
     headers = {'User-Agent': 'Mozilla/5.0'}
+    base_currency = base_currency.upper()
 
+    open_er_rates = None
+    open_er_date = None
     frankfurter_rates = None
     frankfurter_date = None
-    fallback_rates = None
-    fallback_date = None
+    fawaz_rates = None
+    fawaz_date = None
+
+    try:
+        response = requests.get(
+            f"https://open.er-api.com/v6/latest/{base_currency}",
+            headers=headers,
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        open_er_rates = _normalize_rates_dict(data.get('rates', {}))
+        open_er_date = data.get('time_last_update_utc') or data.get('time_last_update_unix')
+    except Exception:
+        pass
 
     try:
         response = requests.get(
@@ -23,49 +59,60 @@ def fetch_currency_rates(base_currency="USD"):
         )
         response.raise_for_status()
         data = response.json()
-        frankfurter_rates = data.get('rates', {})
+        frankfurter_rates = _normalize_rates_dict(data.get('rates', {}))
         frankfurter_date = data.get('date')
     except Exception:
         pass
 
     try:
         response = requests.get(
-            f"https://api.exchangerate-api.com/v4/latest/{base_currency}",
+            f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/{base_currency.lower()}.json",
             headers=headers,
             timeout=10
         )
         response.raise_for_status()
         data = response.json()
-        fallback_rates = data.get('rates', {})
-        fallback_date = data.get('date')
+        fawaz_rates = _normalize_rates_dict(data.get(base_currency.lower(), {}))
+        fawaz_date = data.get('date')
     except Exception:
         pass
 
-    # Базовый источник: Frankfurter. Если в нем нет RUB, дозаполняем из fallback.
-    if frankfurter_rates:
-        merged_rates = dict(frankfurter_rates)
-        source_name = "Frankfurter"
-        if 'RUB' not in merged_rates and fallback_rates and 'RUB' in fallback_rates:
-            merged_rates['RUB'] = fallback_rates['RUB']
-            source_name = "Frankfurter + ExchangeRate-API (RUB)"
+    # Приоритет: open.er-api -> Frankfurter -> Fawaz (как fallback для полноты).
+    if open_er_rates or frankfurter_rates or fawaz_rates:
+        merged_rates = {}
+        source_parts = []
+        latest_date = None
+        trusted_codes = set()
+
+        if open_er_rates:
+            merged_rates.update(open_er_rates)
+            trusted_codes.update(open_er_rates.keys())
+            source_parts.append("open.er-api")
+            latest_date = open_er_date
+        if frankfurter_rates:
+            for c, r in frankfurter_rates.items():
+                merged_rates.setdefault(c, r)
+            trusted_codes.update(frankfurter_rates.keys())
+            source_parts.append("Frankfurter")
+            latest_date = latest_date or frankfurter_date
+        if fawaz_rates:
+            for c, r in fawaz_rates.items():
+                # Не засоряем список криптотикерами: добавляем только
+                # "доверенные" валюты и RUB как критичный кейс.
+                if c in trusted_codes or c == "RUB":
+                    merged_rates.setdefault(c, r)
+            source_parts.append("Fawaz API")
+            latest_date = latest_date or fawaz_date
+
+        merged_rates.pop(base_currency, None)
 
         df = pd.DataFrame(list(merged_rates.items()), columns=['Валюта', 'Курс'])
         df = df.sort_values('Курс', ascending=False)
         df_base = pd.DataFrame([[base_currency, 1.0]], columns=['Валюта', 'Курс'])
         df = pd.concat([df_base, df], ignore_index=True)
 
-        save_to_cache(df, base_currency, frankfurter_date or fallback_date)
-        return df, (frankfurter_date or fallback_date), source_name
-
-    # Если основной источник недоступен, используем fallback целиком.
-    if fallback_rates:
-        df = pd.DataFrame(list(fallback_rates.items()), columns=['Валюта', 'Курс'])
-        df = df.sort_values('Курс', ascending=False)
-        df_base = pd.DataFrame([[base_currency, 1.0]], columns=['Валюта', 'Курс'])
-        df = pd.concat([df_base, df], ignore_index=True)
-
-        save_to_cache(df, base_currency, fallback_date)
-        return df, fallback_date, "ExchangeRate-API"
+        save_to_cache(df, base_currency, latest_date)
+        return df, latest_date, " + ".join(source_parts)
     
     cached = load_from_cache(base_currency)
     if cached:
@@ -86,7 +133,9 @@ def fetch_currency_rates(base_currency="USD"):
 
 @st.cache_data(ttl=3600)
 def get_historical_rates(currency, base="USD", days=30):
-    """Получает исторические данные одним запросом (быстро!)"""
+    """Получает историю курса с fallback на архивный источник."""
+    currency = currency.upper()
+    base = base.upper()
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     
@@ -94,7 +143,13 @@ def get_historical_rates(currency, base="USD", days=30):
     
     try:
         response = requests.get(url, timeout=10)
-        response.raise_for_status()
+        if response.status_code == 404:
+            # У Frankfurter нет части валютных пар (например USD->RUB).
+            response = None
+        else:
+            response.raise_for_status()
+        if response is None:
+            raise ValueError("Frankfurter pair is unavailable")
         data = response.json()
         
         if 'rates' in data:
@@ -108,8 +163,35 @@ def get_historical_rates(currency, base="USD", days=30):
             if dates:
                 df = pd.DataFrame({'date': dates, 'rate': rates})
                 return df.sort_values('date')
-    except Exception as e:
-        print(f"Error fetching historical data: {e}")
+    except Exception:
+        pass
+
+    # Fallback: архивные ежедневные курсы (полнее по покрытию, но медленнее).
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        records = []
+        start_dt = datetime.now() - timedelta(days=days)
+        for i in range(days + 1):
+            day = (start_dt + timedelta(days=i)).strftime("%Y-%m-%d")
+            fallback_url = (
+                f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{day}/v1/currencies/{base.lower()}.json"
+            )
+            response = requests.get(fallback_url, headers=headers, timeout=8)
+            if response.status_code != 200:
+                continue
+
+            data = response.json()
+            rates = data.get(base.lower(), {})
+            if currency.lower() in rates:
+                records.append({
+                    'date': day,
+                    'rate': float(rates[currency.lower()])
+                })
+
+        if records:
+            return pd.DataFrame(records).sort_values('date')
+    except Exception:
+        pass
     
     return None
 
