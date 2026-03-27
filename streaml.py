@@ -16,7 +16,6 @@ from utils.charts import (
 from utils.ml import predict_rate, detect_anomaly
 from utils.export import export_to_excel, export_to_csv, export_to_json
 from utils.alerts import check_alerts
-from utils.news import get_crypto_news, get_forex_news
 
 # Настройка страницы
 st.set_page_config(
@@ -114,7 +113,6 @@ with st.sidebar:
         st.rerun()
     
     auto_refresh = st.checkbox("🔄 Автообновление (30 сек)")
-    show_news = st.checkbox("📰 Показывать новости", value=True)
     
     st.markdown("---")
     
@@ -389,26 +387,6 @@ with st.expander("📥 Экспорт данных", expanded=False):
         file_name=f"currency_rates_{datetime.now().strftime('%Y%m%d')}.{ext}",
         mime=mime
     )
-
-# Новости
-if show_news:
-    st.markdown("---")
-    st.subheader("📰 Новости рынка")
-    
-    news_col1, news_col2 = st.columns(2)
-    
-    with news_col1:
-        st.write("**💰 Forex новости:**")
-        forex_news = get_forex_news()
-        for news in forex_news:
-            importance_icon = "🔴" if news.get('importance') == 'high' else "🟡"
-            st.markdown(f"{importance_icon} [{news['title']}]({news['link']})")
-    
-    with news_col2:
-        st.write("**🪙 Крипто новости:**")
-        crypto_news = get_crypto_news()
-        for news in crypto_news[:5]:
-            st.markdown(f"📰 [{news['title'][:80]}...]({news['link']})")
 
 # Footer
 st.markdown("---")
