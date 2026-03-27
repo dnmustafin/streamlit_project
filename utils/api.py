@@ -8,37 +8,64 @@ import json
 @st.cache_data(ttl=3600)
 def fetch_currency_rates(base_currency="USD"):
     """Получает актуальные курсы валют"""
-    apis = [
-        {
-            "name": "Frankfurter",
-            "url": f"https://api.frankfurter.app/latest?from={base_currency}",
-            "parser": lambda data: (data['rates'], data['date'])
-        },
-        {
-            "name": "ExchangeRate-API",
-            "url": f"https://api.exchangerate-api.com/v4/latest/{base_currency}",
-            "parser": lambda data: (data['rates'], data['date'])
-        }
-    ]
-    
-    for api in apis:
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(api["url"], headers=headers, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            rates, date = api["parser"](data)
-            
-            df = pd.DataFrame(list(rates.items()), columns=['Валюта', 'Курс'])
-            df = df.sort_values('Курс', ascending=False)
-            df_base = pd.DataFrame([[base_currency, 1.0]], columns=['Валюта', 'Курс'])
-            df = pd.concat([df_base, df], ignore_index=True)
-            
-            save_to_cache(df, base_currency, date)
-            
-            return df, date, api["name"]
-        except Exception as e:
-            continue
+    headers = {'User-Agent': 'Mozilla/5.0'}
+
+    frankfurter_rates = None
+    frankfurter_date = None
+    fallback_rates = None
+    fallback_date = None
+
+    try:
+        response = requests.get(
+            f"https://api.frankfurter.app/latest?from={base_currency}",
+            headers=headers,
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        frankfurter_rates = data.get('rates', {})
+        frankfurter_date = data.get('date')
+    except Exception:
+        pass
+
+    try:
+        response = requests.get(
+            f"https://api.exchangerate-api.com/v4/latest/{base_currency}",
+            headers=headers,
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        fallback_rates = data.get('rates', {})
+        fallback_date = data.get('date')
+    except Exception:
+        pass
+
+    # Базовый источник: Frankfurter. Если в нем нет RUB, дозаполняем из fallback.
+    if frankfurter_rates:
+        merged_rates = dict(frankfurter_rates)
+        source_name = "Frankfurter"
+        if 'RUB' not in merged_rates and fallback_rates and 'RUB' in fallback_rates:
+            merged_rates['RUB'] = fallback_rates['RUB']
+            source_name = "Frankfurter + ExchangeRate-API (RUB)"
+
+        df = pd.DataFrame(list(merged_rates.items()), columns=['Валюта', 'Курс'])
+        df = df.sort_values('Курс', ascending=False)
+        df_base = pd.DataFrame([[base_currency, 1.0]], columns=['Валюта', 'Курс'])
+        df = pd.concat([df_base, df], ignore_index=True)
+
+        save_to_cache(df, base_currency, frankfurter_date or fallback_date)
+        return df, (frankfurter_date or fallback_date), source_name
+
+    # Если основной источник недоступен, используем fallback целиком.
+    if fallback_rates:
+        df = pd.DataFrame(list(fallback_rates.items()), columns=['Валюта', 'Курс'])
+        df = df.sort_values('Курс', ascending=False)
+        df_base = pd.DataFrame([[base_currency, 1.0]], columns=['Валюта', 'Курс'])
+        df = pd.concat([df_base, df], ignore_index=True)
+
+        save_to_cache(df, base_currency, fallback_date)
+        return df, fallback_date, "ExchangeRate-API"
     
     cached = load_from_cache(base_currency)
     if cached:
