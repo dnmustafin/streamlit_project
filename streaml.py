@@ -38,15 +38,39 @@ def apply_theme():
         st.markdown("""
         <style>
         .stApp {
-            background-color: #0e1117;
+            background: #0b1220;
+            color: #e5e7eb;
         }
-        .stMarkdown, .stText, .stNumberInput, .stSelectbox {
-            color: #ffffff;
+        .stMarkdown, .stText, .stNumberInput, .stSelectbox, label, p, h1, h2, h3 {
+            color: #e5e7eb !important;
         }
-        .stMetric {
-            background-color: #1e1e2e;
+        div[data-testid="stSidebar"] {
+            background: #0f172a;
+            border-right: 1px solid #1f2937;
+        }
+        div[data-testid="stMetric"] {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 12px;
+        }
+        div[data-testid="stMetricValue"],
+        div[data-testid="stMetricLabel"],
+        div[data-testid="stMetricDelta"] {
+            color: #f9fafb !important;
+        }
+        div[data-testid="stExpander"] {
+            background: #0f172a;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+        }
+        .stAlert {
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+        .stDataFrame, .stTable {
+            border: 1px solid #1f2937;
             border-radius: 10px;
-            padding: 10px;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -105,6 +129,14 @@ with st.sidebar:
 
 # Применяем тему
 apply_theme()
+plotly_template = "plotly_dark" if st.session_state.theme == "dark" else "plotly_white"
+
+
+def apply_plotly_theme(fig):
+    """Применяет текущую тему к графику Plotly."""
+    if fig is not None:
+        fig.update_layout(template=plotly_template)
+    return fig
 
 # Получаем данные
 with st.spinner("Загрузка курсов валют..."):
@@ -164,13 +196,15 @@ col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("📈 Топ-10 валют")
     fig = create_top_currencies_chart(df_rates, base_currency, n=10)
-    st.plotly_chart(fig, width="stretch")
+    fig = apply_plotly_theme(fig)
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 with col_right:
     st.subheader("🗺️ Карта мира")
     world_map = create_world_map(df_rates)
     if world_map:
-        st.plotly_chart(world_map, width="stretch")
+        world_map = apply_plotly_theme(world_map)
+        st.plotly_chart(world_map, width="stretch", theme=None)
     else:
         st.info("Карта мира доступна для основных валют")
 
@@ -191,7 +225,8 @@ with col_hist:
         hist_data = get_historical_with_cache(hist_currency, base_currency)
         hist_fig = create_historical_chart(hist_data, hist_currency, base_currency)
         if hist_fig:
-            st.plotly_chart(hist_fig, width="stretch")
+            hist_fig = apply_plotly_theme(hist_fig)
+            st.plotly_chart(hist_fig, width="stretch", theme=None)
             
             # Проверка аномалий
             if hist_data is not None and len(hist_data) > 0:
@@ -256,9 +291,10 @@ with col_pred:
                     title=f'Прогноз курса {pred_currency} к {base_currency}',
                     xaxis_title="Дата",
                     yaxis_title="Курс",
-                    hovermode='x unified'
+                    hovermode='x unified',
+                    template=plotly_template
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, width="stretch", theme=None)
                 
                 # Показываем прогнозные значения в таблице
                 pred_df = pd.DataFrame({
@@ -293,7 +329,8 @@ with col_comp2:
 
 if currency1 and currency2 and currency1 != currency2:
     comp_fig = create_comparison_chart(df_rates, currency1, currency2)
-    st.plotly_chart(comp_fig, width="stretch")
+    comp_fig = apply_plotly_theme(comp_fig)
+    st.plotly_chart(comp_fig, width="stretch", theme=None)
 
 # Конвертер валют
 st.markdown("---")
