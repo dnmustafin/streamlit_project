@@ -39,11 +39,16 @@ def create_historical_chart(historical_data, currency, base_currency):
 
 def create_world_map(df):
     """Создает карту мира с курсами валют"""
-    # ISO коды валют для карты (упрощенная версия)
+    # Валюта -> репрезентативная страна (ISO-3).
+    # Для валютных союзов (например EUR) используем одну страну-представителя.
     currency_to_country = {
-        'USD': 'USA', 'EUR': 'FRA', 'GBP': 'GBR', 'JPY': 'JPN',
-        'CNY': 'CHN', 'INR': 'IND', 'RUB': 'RUS', 'CAD': 'CAN',
-        'AUD': 'AUS', 'CHF': 'CHE', 'BRL': 'BRA', 'KRW': 'KOR'
+        'AUD': 'AUS', 'BGN': 'BGR', 'BRL': 'BRA', 'CAD': 'CAN', 'CHF': 'CHE',
+        'CNY': 'CHN', 'CZK': 'CZE', 'DKK': 'DNK', 'EUR': 'DEU', 'GBP': 'GBR',
+        'HKD': 'HKG', 'HUF': 'HUN', 'IDR': 'IDN', 'ILS': 'ISR', 'INR': 'IND',
+        'ISK': 'ISL', 'JPY': 'JPN', 'KRW': 'KOR', 'MXN': 'MEX', 'MYR': 'MYS',
+        'NOK': 'NOR', 'NZD': 'NZL', 'PHP': 'PHL', 'PLN': 'POL', 'RON': 'ROU',
+        'SEK': 'SWE', 'SGD': 'SGP', 'THB': 'THA', 'TRY': 'TUR', 'USD': 'USA',
+        'ZAR': 'ZAF', 'RUB': 'RUS'
     }
     
     map_data = []
@@ -51,7 +56,7 @@ def create_world_map(df):
         currency = row['Валюта']
         if currency in currency_to_country:
             map_data.append({
-                'country': currency_to_country[currency],
+                'country_iso3': currency_to_country[currency],
                 'currency': currency,
                 'rate': row['Курс']
             })
@@ -63,8 +68,8 @@ def create_world_map(df):
     
     fig = px.choropleth(
         map_df,
-        locations='country',
-        locationmode='country names',
+        locations='country_iso3',
+        locationmode='ISO-3',
         color='rate',
         hover_name='currency',
         hover_data={'rate': ':.4f'},
