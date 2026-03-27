@@ -76,7 +76,7 @@ with st.sidebar:
     # Выбор базовой валюты
     base_currency = st.selectbox(
         "💰 Базовая валюта:",
-        ["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY"],
+        ["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY", "RUB"],
         index=0
     )
     
