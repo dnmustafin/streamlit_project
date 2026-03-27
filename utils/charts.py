@@ -4,7 +4,8 @@ import pandas as pd
 
 def create_top_currencies_chart(df, base_currency, n=10):
     """Создает график топ N валют"""
-    top = df[df['Валюта'] != base_currency].head(n)
+    # Для пары "валюта/база" меньший курс означает более дорогую валюту.
+    top = df[df['Валюта'] != base_currency].nsmallest(n, 'Курс')
     fig = px.bar(
         top,
         x='Курс',
