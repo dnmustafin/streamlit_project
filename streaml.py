@@ -388,6 +388,61 @@ with st.expander("📥 Экспорт данных", expanded=False):
         mime=mime
     )
 
+# Курс USD в RUB: история и прогноз
+st.markdown("---")
+st.subheader("📈 Курс USD в RUB (история и прогноз)")
+
+usdrub_currency = "RUB"
+usdrub_base = "USD"
+hist_usdrub = get_historical_with_cache(usdrub_currency, usdrub_base)
+
+if hist_usdrub is None or len(hist_usdrub) == 0:
+    st.warning("Недостаточно данных для построения графика USD->RUB.")
+else:
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=hist_usdrub['date'],
+        y=hist_usdrub['rate'],
+        mode='lines+markers',
+        name='Исторические данные',
+        line=dict(color='blue')
+    ))
+
+    if len(hist_usdrub) >= 7:
+        with st.spinner("🔄 Вычисление прогноза USD->RUB..."):
+            prediction, confidence = predict_rate(hist_usdrub, days_ahead=7)
+
+        if prediction is not None:
+            future_dates = [(datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d") for i in range(7)]
+            fig.add_trace(go.Scatter(
+                x=future_dates,
+                y=prediction,
+                mode='lines+markers',
+                name='Прогноз',
+                line=dict(color='red', dash='dash')
+            ))
+
+            if confidence:
+                lower, upper = confidence
+                fig.add_trace(go.Scatter(
+                    x=future_dates + future_dates[::-1],
+                    y=list(upper) + list(lower)[::-1],
+                    fill='toself',
+                    fillcolor='rgba(255,0,0,0.2)',
+                    line=dict(color='rgba(255,0,0,0)'),
+                    name='Доверительный интервал (95%)'
+                ))
+
+    fig.update_layout(
+        title="USD в RUB: история и прогноз (7 дней)",
+        xaxis_title="Дата",
+        yaxis_title="Курс (RUB за 1 USD)",
+        hovermode='x unified',
+        template=plotly_template
+    )
+    fig = apply_plotly_theme(fig)
+    st.plotly_chart(fig, width="stretch", theme=None)
+
 # Footer
 st.markdown("---")
 st.markdown(
